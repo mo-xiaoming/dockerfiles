@@ -79,3 +79,7 @@ RUN cargo install \
     cargo-tarpaulin \
     # macro expansion
     cargo-expand
+
+RUN rustc --version && \
+    clang --version
+
