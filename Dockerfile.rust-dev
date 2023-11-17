@@ -1,0 +1,81 @@
+FROM mcr.microsoft.com/devcontainers/rust:latest
+
+RUN apt-get update && apt-get -qq install -y \
+    lsb-release wget software-properties-common gnupg \
+    htop \
+    cmake \
+    ninja-build \
+    neovim \
+    tmux \
+    # for tmux-cpu
+    sysstat \
+    # for coc.nvim
+    nodejs npm \
+    # for ctrlp
+    silversearcher-ag \
+    >/dev/null
+
+ADD https://api.github.com/repos/mo-xiaoming/ubuntu-setup/git/refs/heads/main version.json
+RUN git clone --depth=1 https://github.com/mo-xiaoming/ubuntu-setup.git && \
+    wget https://apt.llvm.org/llvm.sh && \
+    chmod +x llvm.sh && \
+    sed -i 's#^add-apt-repository .*#echo "${REPO_NAME}" | cat -> /etc/apt/sources.list.d/apt.llvm.org.list#g' llvm.sh && \
+    ./llvm.sh all && \
+    apt-get autoremove -y && \
+    chmod +x ./ubuntu-setup/update-alternatives-clang.sh && \
+    ./ubuntu-setup/update-alternatives-clang.sh $(grep -e '^CURRENT_LLVM_STABLE' llvm.sh | cut -d= -f2) 100 && \
+    rm llvm.sh && \
+    rm -rf ubuntu-setup && \
+    rm version.json
+
+USER vscode
+RUN whoami
+WORKDIR /home/vscode
+
+ADD https://api.github.com/repos/mo-xiaoming/ubuntu-setup/git/refs/heads/main version.json
+ADD https://api.github.com/repos/tmux-plugins/tpm/git/refs/heads/master version1.json
+RUN git clone --depth=1 https://github.com/mo-xiaoming/ubuntu-setup.git && \
+    # tmux plugin
+    mkdir -p ~/.config/tmux/plugins && \
+    git clone --depth=1 https://github.com/tmux-plugins/tpm ~/.config/tmux/plugins/tpm && \
+    cp $PWD/ubuntu-setup/_tmux.conf ~/.config/tmux/tmux.conf && \
+    # vscode user settings
+    mkdir -p ~/.config/Code/User && \
+    cp $PWD/ubuntu-setup/code_settings.json ~/.config/Code/User/settings.json && \
+    # neovim config
+    mkdir -p ~/.config/nvim/syntax && \
+    cp $PWD/ubuntu-setup/vim-files/hobbes.vim ~/.config/nvim/syntax/hobbes.vim && \
+    cp $PWD/ubuntu-setup/vim-files/init.vim ~/.config/nvim/init.vim && \
+    curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim && \
+    nvim --headless +PlugInstall +UpdateRemotePlugins +qa && \
+    nvim --headless +'CocInstall -sync coc-json coc-spell-checker coc-clangd coc-explorer coc-rust-analyzer coc-copilot' +qa && \
+    #nvim --headless +'CocCommand clangd.install' +qa a.cpp && \
+    # clean up
+    rm -rf ubuntu-setup && \
+    rm version.json version1.json
+
+RUN python3 <<EOF
+import os
+
+with open(os.path.expanduser('~/.bashrc'), 'a') as f:
+    f.write('\n')
+    f.write('alias vi="nvim"\n')
+    f.write('alias vim="nvim"\n')
+    f.write('alias vimdiff="nvim -d"\n')
+    f.write('alias view="nvim -R"\n')
+    f.write('\n')
+    f.write('export EDITOR=nvim\n')
+
+EOF
+
+RUN cargo install \
+    cargo-watch \
+    cargo-nextest \
+    # show overview of a crate's modules
+    cargo-modules \
+    # create security vulnerabilities report
+    cargo-audit \
+    # code coverage
+    cargo-tarpaulin \
+    # macro expansion
+    cargo-expand
